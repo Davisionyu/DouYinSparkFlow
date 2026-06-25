@@ -35,6 +35,7 @@ def handle_response(response: Response):
                 nickname = item.get("user", {}).get("nickname")
                 user_id = item.get("user_id", "")
                 userIDDict[str(short_id)] = {"nickname": nickname, "user_id": user_id}
+                logger.info(f"缓存用户 ShortId={short_id} nickname={nickname}")
         except Exception as e:
             tb = traceback.extract_tb(e.__traceback__)
             last = tb[-1]
@@ -101,7 +102,7 @@ def scroll_and_select_user(page, username, targets):
 
     # [修复] 新增：连续空滚动计数器（滚动后没有发现新好友的次数）
     empty_scroll_count = 0
-    MAX_EMPTY_SCROLLS = 10  # 连续10次滚动没有新好友，认为到底了
+    MAX_EMPTY_SCROLLS = 30  # 连续30次滚动没有新好友，认为到底了
 
     while True:
         # 查找所有目标元素
@@ -122,15 +123,26 @@ def scroll_and_select_user(page, username, targets):
                     continue  # 已处理过，跳过
                 found_targets.add(targetName)
 
-                logger.debug(f"账号 {username} 找到好友 {targetName}")
+                logger.info(f"发现好友: {targetName}")
+                logger.info(f"当前缓存用户数量: {len(userIDDict)}")
+                logger.info(f"当前缓存ShortId: {list(userIDDict.keys())}")
                 # 检查是否是目标用户名
                 if matchMode == "short_id":
                     targetSymbol = next((sid for sid, info in userIDDict.items() if info.get("nickname") == targetName), None)
+                    logger.info(f"昵称[{targetName}] -> ShortId[{targetSymbol}]")
                 else:
                     targetSymbol = targetName
 
+                logger.info(f"目标列表: {targets}")
                 if targetSymbol in targets:
+                    logger.info(f"✅ 匹配成功: {targetName} -> {targetSymbol}")
+
+                    if targetSymbol in remaining_targets:
+                        remaining_targets.remove(targetSymbol)
+                        logger.info(f"已完成目标 {targetSymbol}，剩余目标: {remaining_targets}")
+
                     element.click()
+
                     if matchMode == "short_id":
                         logger.debug(
                             f"账号 {username} 选中目标好友 {targetName} 准备开始交互"
@@ -139,15 +151,16 @@ def scroll_and_select_user(page, username, targets):
                         logger.debug(
                             f"账号 {username} 选中目标好友 {targetName} (ShortId: {targetSymbol}) 准备开始交互"
                         )
+
                     yield targetName
-                    
-                    # [修改] 标记已找到，如果全找到了直接退出
-                    if targetSymbol in remaining_targets:
-                        remaining_targets.remove(targetSymbol)
+
                     if len(remaining_targets) == 0:
-                        logger.debug(f"账号 {username} 所有目标好友均已找到，停止搜索")
+                        logger.info(f"账号 {username} 所有目标好友均已找到，停止搜索")
                         return
+
                     break
+                else:
+                    logger.warning(f"❌ 未匹配: {targetName} -> {targetSymbol}")
             except Exception as e:
                 traceback.print_exc()
         else:
@@ -301,3 +314,5 @@ def runTasks():
 
         
 
+
+# WARNING: automatic patch could not locate target block.
